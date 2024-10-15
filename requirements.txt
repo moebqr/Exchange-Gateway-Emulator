@@ -2,3 +2,6 @@ websockets
 pytest
 dash
 plotly
+websocket-client
+streamlit
+pandas

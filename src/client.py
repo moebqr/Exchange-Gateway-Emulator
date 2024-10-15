@@ -27,10 +27,21 @@ class TradingClient:
                 if sock is not None:
                     sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
                 logger.info("Connected to the server")
+                
+                # Subscribe to the trades channel
+                await self.subscribe_to_trades()
                 return
             except Exception as e:
                 logger.error(f"Failed to connect: {e}")
                 await asyncio.sleep(5)  # Wait for 5 seconds before retrying
+
+    async def subscribe_to_trades(self):
+        subscription_message = {
+            "type": "subscribe",
+            "channel": "trades"
+        }
+        await self.websocket.send(json.dumps(subscription_message))
+        logger.info("Subscribed to trades channel")
 
     async def send_order(self, order: Dict[str, Any]):
         try:
@@ -53,8 +64,26 @@ class TradingClient:
             await self.connect()  # Try to reconnect
             return None
 
+    async def listen_for_updates(self):
+        while True:
+            try:
+                message = await self.websocket.recv()
+                data = json.loads(message)
+                if data.get('type') == 'order_update':
+                    logger.info(f"Received order update: {data}")
+                    # Here you can process the order update as needed
+            except websockets.exceptions.ConnectionClosed:
+                logger.error("WebSocket connection closed. Reconnecting...")
+                await self.connect()
+            except Exception as e:
+                logger.error(f"Error while listening for updates: {e}")
+                await asyncio.sleep(5)
+
     async def run(self):
         await self.connect()
+        
+        # Start listening for updates in a separate task
+        asyncio.create_task(self.listen_for_updates())
         
         while True:
             try:

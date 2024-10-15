@@ -3,16 +3,13 @@ import json
 import websockets
 from websockets import WebSocketServerProtocol
 from typing import Dict, Any, Set, List
-import cProfile
-import pstats
-import io
 import uuid
 import logging
 from src.order_matching import OrderMatchingEngine, Order
 from src.utils import profile, track_latency
 from src.config import BATCH_SIZE, PROCESSING_DELAY, WEBSOCKET_HOST, WEBSOCKET_PORT
 
-logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 class ExchangeServer:
@@ -23,6 +20,11 @@ class ExchangeServer:
         self.order_matching_engine = OrderMatchingEngine()
         self.order_queue: List[Dict[str, Any]] = []
         self.processing_lock = asyncio.Lock()
+        self.metrics = {
+            'avg_latency': 0,
+            'order_throughput': 0,
+            'total_trades': 0
+        }
 
     async def handle_client(self, websocket: WebSocketServerProtocol, path: str):
         logger.info(f"New client connected: {websocket.remote_address}")
@@ -80,16 +82,35 @@ class ExchangeServer:
                     logger.debug(f"Order processing result: {result}")
                     await websocket.send(json.dumps(result))
                     
+                    # Update metrics
+                    self.update_metrics(result)
+                    
                     # Broadcast the result to all connected clients
                     broadcast_message = json.dumps({
                         "type": "order_update",
-                        "data": result
+                        "data": {
+                            **result,
+                            "latency": self.metrics['avg_latency'],
+                            "throughput": self.metrics['order_throughput']
+                        }
                     })
                     logger.debug(f"Broadcasting message: {broadcast_message}")
                     await self.broadcast(broadcast_message)
                 except Exception as e:
                     logger.error(f"Error processing order: {e}", exc_info=True)
                     await websocket.send(json.dumps({"error": f"Error processing order: {str(e)}"}))
+
+    def update_metrics(self, result):
+        # Update latency (assuming result contains a 'latency' field)
+        if 'latency' in result:
+            self.metrics['avg_latency'] = (self.metrics['avg_latency'] + result['latency']) / 2
+
+        # Update order throughput (orders per second)
+        self.metrics['order_throughput'] += 1
+
+        # Update total trades if a trade occurred
+        if result.get('status') == 'matched':
+            self.metrics['total_trades'] += 1
 
     async def broadcast(self, message: str):
         logger.info(f"Broadcasting message to {len(self.clients)} clients: {message}")
