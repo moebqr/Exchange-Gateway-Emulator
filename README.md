@@ -2,7 +2,25 @@
 
 ## Project Overview
 
-This project implements a real-time, low-latency exchange gateway emulator in Python. It simulates a trading environment with a focus on performance and efficiency. The system includes a WebSocket server for order processing, a client for submitting orders, an order matching engine, and a real-time dashboard for visualizing the order book and key metrics.
+This project implements a real-time, low-latency exchange gateway emulator in Python, designed to simulate a high-frequency trading environment. The emulator is architected to handle large volumes of orders with minimal latency, making it suitable for performance testing and strategy development.
+
+### Architecture
+
+- **WebSocket Server**: The server is built using Python's `websockets` library, enabling efficient real-time communication with multiple clients. It handles incoming order requests, processes them, and sends back confirmations or rejections. The server is designed to be non-blocking, leveraging `asyncio` for concurrent operations.
+
+- **Order Matching Engine**: The core of the emulator, implemented in `src/order_matching.py`, maintains an in-memory order book. It uses efficient data structures to store and match buy and sell orders. The engine supports various order types and matching algorithms, ensuring high throughput and low latency.
+
+- **Client Simulation**: The client component, found in `src/client.py`, acts as a trading participant. It can generate random orders or be configured to follow specific trading strategies. The client connects to the server via WebSockets, sending orders and receiving trade confirmations.
+
+- **Real-Time Dashboard**: The dashboard, implemented using Dash and Plotly, provides a visual interface for monitoring the order book and key performance metrics. It updates in real-time, offering insights into order flow, latency, and throughput.
+
+### Key Features
+
+- **Asynchronous Processing**: Utilizes Python's `asyncio` to handle multiple client connections and order processing concurrently, reducing latency and improving scalability.
+
+- **Performance Profiling**: Integrated with `cProfile` for detailed performance analysis, allowing users to identify bottlenecks and optimize the system.
+
+- **Comprehensive Testing**: Includes unit tests and stress tests to ensure reliability and performance under load. The stress tests simulate hundreds of concurrent clients to evaluate system robustness.
 
 ## 📁 Project Structure
 
@@ -34,24 +52,6 @@ Here's an overview of the project's file structure:
 - Dash and Plotly: For real-time data visualization
 - cProfile: For performance profiling
 - pytest: For unit testing
-
-## How It Works
-
-### Server (`src/server.py`)
-
-The server acts as the central hub of the emulator. It uses WebSockets to handle real-time bidirectional communication with multiple clients. The server is responsible for receiving order requests, processing them, and sending back confirmations or rejections. It maintains an order book and uses the order matching engine to match buy and sell orders efficiently.
-
-### Order Matching Engine (`src/order_matching.py`)
-
-The order matching engine is the core component that processes incoming orders. It maintains an order book, which is a data structure that holds all buy and sell orders. When a new order is received, the engine attempts to match it with existing orders in the order book. If a match is found, a trade is executed, and both orders are updated or removed from the book.
-
-### Client (`src/client.py`)
-
-The client simulates a trading participant. It connects to the server via WebSockets and sends order requests. The client can be configured to generate random orders or submit specific orders based on user-defined strategies. It also listens for trade confirmations and updates from the server.
-
-### Real-Time Dashboard (`dashboards/order_book_dashboard.py`)
-
-The dashboard provides a visual representation of the current state of the order book and key performance metrics. It uses Dash and Plotly to create interactive charts and graphs that update in real-time. Users can view the depth of the order book, track order throughput, and monitor latency metrics.
 
 ## Installation and Setup
 
