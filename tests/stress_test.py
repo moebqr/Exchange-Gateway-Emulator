@@ -1,6 +1,12 @@
 import asyncio
 import time
 import statistics
+import sys
+import os
+
+# Add the project root directory to the Python path
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 from src.server import ExchangeServer
 from src.client import TradingClient
 
@@ -56,4 +62,3 @@ if __name__ == "__main__":
     ORDERS_PER_CLIENT = 10
     
     asyncio.run(run_stress_test(NUM_CLIENTS, ORDERS_PER_CLIENT))
-

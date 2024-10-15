@@ -7,9 +7,13 @@ import cProfile
 import pstats
 import io
 import uuid
+import logging
 from src.order_matching import OrderMatchingEngine, Order
 from src.utils import profile, track_latency
-from src.config import BATCH_SIZE, PROCESSING_DELAY
+from src.config import BATCH_SIZE, PROCESSING_DELAY, WEBSOCKET_HOST, WEBSOCKET_PORT
+
+logging.basicConfig(level=logging.DEBUG)
+logger = logging.getLogger(__name__)
 
 class ExchangeServer:
     def __init__(self, host: str, port: int):
@@ -21,28 +25,46 @@ class ExchangeServer:
         self.processing_lock = asyncio.Lock()
 
     async def handle_client(self, websocket: WebSocketServerProtocol, path: str):
+        logger.info(f"New client connected: {websocket.remote_address}")
         self.clients.add(websocket)
         try:
             async for message in websocket:
+                logger.debug(f"Received message: {message}")
                 await self.process_message(websocket, message)
+        except websockets.exceptions.ConnectionClosed as e:
+            logger.error(f"Connection closed unexpectedly: {e}")
         finally:
             self.clients.remove(websocket)
+            logger.info(f"Client disconnected: {websocket.remote_address}")
 
     async def process_message(self, websocket: WebSocketServerProtocol, message: str):
         try:
-            order_data = json.loads(message)
+            data = json.loads(message)
+            if data.get('type') == 'subscribe':
+                logger.info(f"Client subscribed to channel: {data.get('channel')}")
+                return
+
+            order_data = data
             order = Order(
-                order_id=str(uuid.uuid4()),  # Generate a unique ID
+                order_id=str(uuid.uuid4()),
                 symbol=order_data['symbol'],
                 order_type=order_data['type'],
                 price=order_data['price'],
                 quantity=order_data['quantity']
             )
             self.order_queue.append((websocket, order))
-            if len(self.order_queue) >= BATCH_SIZE:  # Process in batches of 10
+            logger.debug(f"Order added to queue: {order}")
+            if len(self.order_queue) >= BATCH_SIZE:
                 await self.process_order_batch()
-        except json.JSONDecodeError:
+        except json.JSONDecodeError as e:
+            logger.error(f"Invalid JSON received: {message}")
             await websocket.send(json.dumps({"error": "Invalid JSON format"}))
+        except KeyError as e:
+            logger.error(f"Missing key in order data: {e}")
+            await websocket.send(json.dumps({"error": f"Missing key in order data: {e}"}))
+        except Exception as e:
+            logger.error(f"Error processing message: {e}")
+            await websocket.send(json.dumps({"error": "Internal server error"}))
 
     @profile
     @track_latency
@@ -52,17 +74,38 @@ class ExchangeServer:
             self.order_queue = self.order_queue[BATCH_SIZE:]
 
             for websocket, order in batch:
-                result = await self.order_matching_engine.process_order(order)
-                await websocket.send(json.dumps(result))
+                try:
+                    logger.debug(f"Processing order: {order}")
+                    result = self.order_matching_engine.process_order(order.__dict__)
+                    logger.debug(f"Order processing result: {result}")
+                    await websocket.send(json.dumps(result))
+                    
+                    # Broadcast the result to all connected clients
+                    broadcast_message = json.dumps({
+                        "type": "order_update",
+                        "data": result
+                    })
+                    logger.debug(f"Broadcasting message: {broadcast_message}")
+                    await self.broadcast(broadcast_message)
+                except Exception as e:
+                    logger.error(f"Error processing order: {e}", exc_info=True)
+                    await websocket.send(json.dumps({"error": f"Error processing order: {str(e)}"}))
+
+    async def broadcast(self, message: str):
+        logger.info(f"Broadcasting message to {len(self.clients)} clients: {message}")
+        for client in self.clients:
+            try:
+                await client.send(message)
+            except websockets.exceptions.ConnectionClosed:
+                logger.warning(f"Failed to send message to client: {client.remote_address}")
 
     async def start(self):
         server = await websockets.serve(
             self.handle_client,
             self.host,
-            self.port,
-            tcp_nodelay=True  # Enable TCP_NODELAY to minimize latency
+            self.port
         )
-        print(f"Server started on ws://{self.host}:{self.port}")
+        logger.info(f"Server started on ws://{self.host}:{self.port}")
         
         # Start the order processing loop
         asyncio.create_task(self.order_processing_loop())
@@ -73,11 +116,14 @@ class ExchangeServer:
         while True:
             if self.order_queue:
                 await self.process_order_batch()
-            await asyncio.sleep(PROCESSING_DELAY)  # Small delay to prevent busy-waiting
+            await asyncio.sleep(PROCESSING_DELAY)
 
 async def main():
-    server = ExchangeServer("localhost", 6789)
-    await server.start()
+    try:
+        server = ExchangeServer(WEBSOCKET_HOST, WEBSOCKET_PORT)
+        await server.start()
+    except Exception as e:
+        logger.error(f"Error in main server loop: {e}", exc_info=True)
 
 if __name__ == "__main__":
     asyncio.run(main())
