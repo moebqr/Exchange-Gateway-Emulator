@@ -12,7 +12,7 @@ This project implements a real-time, low-latency exchange gateway emulator in Py
 
 - **Client Simulation**: The client component, found in `src/client.py`, acts as a trading participant. It can generate random orders or be configured to follow specific trading strategies. The client connects to the server via WebSockets, sending orders and receiving trade confirmations.
 
-- **Real-Time Dashboard**: The dashboard, implemented using Dash and Plotly, provides a visual interface for monitoring the order book and key performance metrics. It updates in real-time, offering insights into order flow, latency, and throughput.
+- **Real-Time Dashboard**: The dashboard, implemented using Streamlit, provides a visual interface for monitoring the order book and key performance metrics. It updates in real-time, offering insights into order flow, latency, and throughput.
 
 ### Key Features
 
@@ -49,7 +49,7 @@ Here's an overview of the project's file structure:
 - Python 3.8+
 - websockets: For real-time bidirectional communication
 - asyncio: For asynchronous programming
-- Dash and Plotly: For real-time data visualization
+- Streamlit: For real-time data visualization
 - cProfile: For performance profiling
 - pytest: For unit testing
 
@@ -84,7 +84,7 @@ Here's an overview of the project's file structure:
 
 6. (Optional) Start the dashboard:
    ```
-   python dashboards/order_book_dashboard.py
+   streamlit run dashboards/order_book_dashboard.py
    ```
 
 ## Usage
@@ -148,7 +148,7 @@ The dashboard also displays key performance metrics in real-time:
 - **Order Throughput**: The number of orders processed per second.
 - **Total Trades**: The cumulative number of executed trades.
 
-To access the dashboard, start the dashboard server and navigate to `http://localhost:8050` in your web browser.
+To access the dashboard, start the Streamlit server and navigate to the provided URL (typically `http://localhost:8501`) in your web browser.
 
 ## 🤝 Contributing
 
