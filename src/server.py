@@ -75,11 +75,12 @@ class ExchangeServer:
             batch = self.order_queue[:BATCH_SIZE]
             self.order_queue = self.order_queue[BATCH_SIZE:]
 
+            logger.info(f"Processing batch of {len(batch)} orders")
             for websocket, order in batch:
                 try:
-                    logger.debug(f"Processing order: {order}")
+                    logger.info(f"Processing order: {order}")
                     result = self.order_matching_engine.process_order(order.__dict__)
-                    logger.debug(f"Order processing result: {result}")
+                    logger.info(f"Order processing result: {result}")
                     await websocket.send(json.dumps(result))
                     
                     # Update metrics
@@ -94,7 +95,7 @@ class ExchangeServer:
                             "throughput": self.metrics['order_throughput']
                         }
                     })
-                    logger.debug(f"Broadcasting message: {broadcast_message}")
+                    logger.info(f"Broadcasting message: {broadcast_message}")
                     await self.broadcast(broadcast_message)
                 except Exception as e:
                     logger.error(f"Error processing order: {e}", exc_info=True)

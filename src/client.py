@@ -100,12 +100,14 @@ class TradingClient:
     def generate_random_order(self) -> Dict[str, Any]:
         symbols = ["AAPL", "GOOGL", "MSFT", "AMZN"]
         order_types = ["buy", "sell"]
-        return {
+        order = {
             "type": random.choice(order_types),
             "symbol": random.choice(symbols),
             "price": round(random.uniform(100, 1000), 2),
             "quantity": random.randint(1, 100)
         }
+        logger.info(f"Generated random order: {order}")
+        return order
 
 async def main():
     client = TradingClient("ws://localhost:6789", "client1")

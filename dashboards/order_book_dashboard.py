@@ -9,7 +9,7 @@ from collections import defaultdict
 import logging
 import time
 
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
 # Global variables to store real-time data
@@ -41,15 +41,17 @@ async def websocket_client():
                             if order_data.get('status') == 'open':
                                 order = order_data.get('order', {})
                                 symbol = order.get('symbol', '')
-                                order_type = order.get('order_type', '')
+                                order_type = order.get('type', '')
                                 price = order.get('price', 0)
                                 quantity = order.get('quantity', 0)
+                                logger.info(f"Updating order book: {symbol} {order_type} {price} {quantity}")
                                 order_book[symbol][order_type][price] += quantity
                             elif order_data.get('status') == 'matched':
                                 trade = order_data.get('trade', {})
                                 symbol = trade.get('symbol', '')
                                 price = trade.get('price', 0)
                                 quantity = trade.get('quantity', 0)
+                                logger.info(f"Matched trade: {symbol} {price} {quantity}")
                                 order_book[symbol]['buy'][price] -= quantity
                                 order_book[symbol]['sell'][price] -= quantity
                                 metrics['total_trades'] += 1
@@ -57,6 +59,10 @@ async def websocket_client():
                             # Update metrics
                             metrics['avg_latency'] = order_data.get('latency', metrics['avg_latency'])
                             metrics['order_throughput'] = order_data.get('throughput', metrics['order_throughput'])
+                            logger.info(f"Updated metrics: {metrics}")
+                            logger.info(f"Current order book: {order_book}")
+                        else:
+                            logger.warning(f"Received unknown message type: {data.get('type')}")
                     
                     except websockets.exceptions.ConnectionClosed:
                         logger.warning("WebSocket connection closed. Reconnecting...")
@@ -75,6 +81,14 @@ def plot_order_book(symbol):
     buy_quantities = list(order_book[symbol]['buy'].values())
     sell_prices = list(order_book[symbol]['sell'].keys())
     sell_quantities = list(order_book[symbol]['sell'].values())
+    
+    if not buy_prices and not sell_prices:
+        return go.Figure().add_annotation(
+            x=0.5, y=0.5,
+            text="No data available",
+            showarrow=False,
+            font=dict(size=20)
+        )
     
     fig = go.Figure(data=[
         go.Bar(name='Buy Orders', x=buy_prices, y=buy_quantities, marker_color='green'),
@@ -116,15 +130,31 @@ def main():
         throughput_metric = st.empty()
         trades_metric = st.empty()
 
+    # Debug information
+    st.subheader("Debug Information")
+    debug_info = st.empty()
+
     # Update dashboard in real-time
     while True:
-        order_book_chart.plotly_chart(plot_order_book(selected_symbol), use_container_width=True)
+        try:
+            fig = plot_order_book(selected_symbol)
+            order_book_chart.plotly_chart(fig, use_container_width=True)
         
-        latency_metric.metric("Average Latency", f"{metrics['avg_latency']:.2f} ms")
-        throughput_metric.metric("Order Throughput", f"{metrics['order_throughput']:.2f} orders/s")
-        trades_metric.metric("Total Trades", metrics['total_trades'])
+            latency_metric.metric("Average Latency", f"{metrics['avg_latency']:.2f} ms")
+            throughput_metric.metric("Order Throughput", f"{metrics['order_throughput']:.2f} orders/s")
+            trades_metric.metric("Total Trades", metrics['total_trades'])
         
-        time.sleep(1)  # Update every second instead of using st.experimental_rerun
+            # Update debug information
+            debug_info.json({
+                "Current Order Book": dict(order_book),
+                "Metrics": metrics
+            })
+        
+        except Exception as e:
+            st.error(f"An error occurred: {str(e)}")
+            logger.error(f"Error in main loop: {e}", exc_info=True)
+        
+        time.sleep(1)  # Update every second
 
 if __name__ == "__main__":
     main()
