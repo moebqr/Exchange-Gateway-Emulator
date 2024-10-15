@@ -13,6 +13,9 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 class ExchangeServer:
+    """
+    Handles WebSocket connections and order processing for the exchange.
+    """
     def __init__(self, host: str, port: int):
         self.host = host
         self.port = port
@@ -27,6 +30,17 @@ class ExchangeServer:
         }
 
     async def handle_client(self, websocket: WebSocketServerProtocol, path: str):
+        """
+        Handle a new WebSocket client connection.
+
+        This method is called for each new client that connects to the server.
+        It adds the client to the set of connected clients, processes incoming
+        messages, and handles client disconnection.
+
+        Args:
+            websocket (WebSocketServerProtocol): The WebSocket connection for the client.
+            path (str): The path of the WebSocket connection (unused in this implementation).
+        """
         logger.info(f"New client connected: {websocket.remote_address}")
         self.clients.add(websocket)
         try:
@@ -40,12 +54,24 @@ class ExchangeServer:
             logger.info(f"Client disconnected: {websocket.remote_address}")
 
     async def process_message(self, websocket: WebSocketServerProtocol, message: str):
+        """
+        Process an incoming message from a client.
+
+        This method handles different types of messages, including subscriptions
+        and order placements. It validates the message, creates an Order object,
+        and adds it to the processing queue.
+
+        Args:
+            websocket (WebSocketServerProtocol): The WebSocket connection for the client.
+            message (str): The JSON-encoded message received from the client.
+        """
         try:
             data = json.loads(message)
             if data.get('type') == 'subscribe':
                 logger.info(f"Client subscribed to channel: {data.get('channel')}")
                 return
 
+            # Create an Order object from the received data
             order_data = data
             order = Order(
                 order_id=str(uuid.uuid4()),
@@ -56,6 +82,8 @@ class ExchangeServer:
             )
             self.order_queue.append((websocket, order))
             logger.debug(f"Order added to queue: {order}")
+
+            # Trigger batch processing if queue reaches threshold
             if len(self.order_queue) >= BATCH_SIZE:
                 await self.process_order_batch()
         except json.JSONDecodeError as e:
@@ -71,6 +99,13 @@ class ExchangeServer:
     @profile
     @track_latency
     async def process_order_batch(self):
+        """
+        Process a batch of orders from the queue.
+
+        This method is called when the order queue reaches the BATCH_SIZE threshold.
+        It processes orders in batches for improved efficiency, updates metrics,
+        and broadcasts results to all connected clients.
+        """
         async with self.processing_lock:
             batch = self.order_queue[:BATCH_SIZE]
             self.order_queue = self.order_queue[BATCH_SIZE:]
@@ -101,8 +136,14 @@ class ExchangeServer:
                     logger.error(f"Error processing order: {e}", exc_info=True)
                     await websocket.send(json.dumps({"error": f"Error processing order: {str(e)}"}))
 
-    def update_metrics(self, result):
-        # Update latency (assuming result contains a 'latency' field)
+    def update_metrics(self, result: Dict[str, Any]):
+        """
+        Update the server's performance metrics based on the order processing result.
+
+        Args:
+            result (Dict[str, Any]): The result of processing an order.
+        """
+        # Update average latency
         if 'latency' in result:
             self.metrics['avg_latency'] = (self.metrics['avg_latency'] + result['latency']) / 2
 
@@ -114,6 +155,12 @@ class ExchangeServer:
             self.metrics['total_trades'] += 1
 
     async def broadcast(self, message: str):
+        """
+        Broadcast a message to all connected clients.
+
+        Args:
+            message (str): The message to broadcast.
+        """
         logger.info(f"Broadcasting message to {len(self.clients)} clients: {message}")
         for client in self.clients:
             try:
@@ -122,6 +169,9 @@ class ExchangeServer:
                 logger.warning(f"Failed to send message to client: {client.remote_address}")
 
     async def start(self):
+        """
+        Start the WebSocket server and the order processing loop.
+        """
         server = await websockets.serve(
             self.handle_client,
             self.host,
@@ -141,6 +191,9 @@ class ExchangeServer:
             await asyncio.sleep(PROCESSING_DELAY)
 
 async def main():
+    """
+    Main function to start the Exchange Server.
+    """
     try:
         server = ExchangeServer(WEBSOCKET_HOST, WEBSOCKET_PORT)
         await server.start()

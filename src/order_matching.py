@@ -15,16 +15,19 @@ class Order:
 
 class OrderMatchingEngine:
     def __init__(self):
+        # Initialize dictionaries to store buy and sell orders for each symbol
         self.buy_orders: Dict[str, List[Order]] = defaultdict(list)
         self.sell_orders: Dict[str, List[Order]] = defaultdict(list)
 
     def add_order(self, order: Order) -> Dict[str, Any]:
+        # Process incoming buy order
         if order.order_type == 'buy':
             matched_order = self._match_order(order, self.sell_orders[order.symbol])
             if matched_order:
                 return self._execute_trade(order, matched_order)
             self.buy_orders[order.symbol].append(order)
             return {"status": "open", "message": "Order added to the book"}
+        # Process incoming sell order
         elif order.order_type == 'sell':
             matched_order = self._match_order(order, self.buy_orders[order.symbol])
             if matched_order:
@@ -35,19 +38,21 @@ class OrderMatchingEngine:
             return {"status": "error", "message": "Invalid order type"}
 
     def _match_order(self, order: Order, opposite_orders: List[Order]) -> Optional[Order]:
+        # Find a matching order with the same price
         for opposite_order in opposite_orders:
             if order.price == opposite_order.price:
                 return opposite_order
         return None
 
     def _execute_trade(self, order1: Order, order2: Order) -> Dict[str, Any]:
+        # Determine the quantity of the trade
         trade_quantity = min(order1.quantity, order2.quantity)
         
-        # Update order quantities
+        # Update order quantities after the trade
         order1.quantity -= trade_quantity
         order2.quantity -= trade_quantity
         
-        # Remove or update orders in the book
+        # Remove fully executed orders from the book and update partially filled orders
         if order1.order_type == 'buy':
             self.buy_orders[order1.symbol] = [order for order in self.buy_orders[order1.symbol] if order.order_id != order1.order_id]
             self.sell_orders[order1.symbol] = [order for order in self.sell_orders[order1.symbol] if order.order_id != order2.order_id]
@@ -55,7 +60,7 @@ class OrderMatchingEngine:
             self.sell_orders[order1.symbol] = [order for order in self.sell_orders[order1.symbol] if order.order_id != order1.order_id]
             self.buy_orders[order1.symbol] = [order for order in self.buy_orders[order1.symbol] if order.order_id != order2.order_id]
 
-        # If there's remaining quantity, add back to the book
+        # If there's remaining quantity, add the order back to the book
         if order1.quantity > 0:
             if order1.order_type == 'buy':
                 self.buy_orders[order1.symbol].append(order1)
@@ -67,6 +72,7 @@ class OrderMatchingEngine:
             else:
                 self.sell_orders[order2.symbol].append(order2)
 
+        # Return trade execution details
         return {
             "status": "matched",
             "message": "Trade executed",
@@ -81,6 +87,7 @@ class OrderMatchingEngine:
 
     def process_order(self, order_data: Dict[str, Any]) -> Dict[str, Any]:
         try:
+            # Create an Order object from the input data
             order = Order(
                 order_id=order_data.get('order_id', ''),
                 symbol=order_data['symbol'],
@@ -89,12 +96,15 @@ class OrderMatchingEngine:
                 quantity=order_data['quantity']
             )
             logger.debug(f"Processing order: {order}")
+            # Add the order to the matching engine and get the result
             result = self.add_order(order)
             logger.debug(f"Order processing result: {result}")
             return result
         except KeyError as e:
+            # Log and return an error if required data is missing
             logger.error(f"Missing key in order data: {e}", exc_info=True)
             return {"error": f"Missing key in order data: {str(e)}"}
         except Exception as e:
+            # Log and return an error for any other exceptions
             logger.error(f"Error processing order: {e}", exc_info=True)
             return {"error": f"Error processing order: {str(e)}"}

@@ -11,6 +11,16 @@ from src.server import ExchangeServer
 from src.client import TradingClient
 
 async def run_client(client_id, num_orders):
+    """
+    Simulates a single client sending orders and measures latencies.
+    
+    Args:
+        client_id (int): Unique identifier for the client.
+        num_orders (int): Number of orders to send.
+    
+    Returns:
+        list: List of latencies (in milliseconds) for each order sent.
+    """
     client = TradingClient(f"ws://localhost:6789", f"client_{client_id}")
     await client.connect()
     
@@ -26,12 +36,21 @@ async def run_client(client_id, num_orders):
     return latencies
 
 async def run_stress_test(num_clients, orders_per_client):
+    """
+    Runs a stress test by simulating multiple clients sending orders concurrently.
+    
+    Args:
+        num_clients (int): Number of clients to simulate.
+        orders_per_client (int): Number of orders each client should send.
+    """
+    # Start the exchange server
     server = ExchangeServer("localhost", 6789)
     server_task = asyncio.create_task(server.start())
     await asyncio.sleep(1)  # Give the server time to start
 
     start_time = time.time()
     
+    # Create and run tasks for all clients
     client_tasks = [run_client(i, orders_per_client) for i in range(num_clients)]
     all_latencies = await asyncio.gather(*client_tasks)
     
@@ -40,6 +59,7 @@ async def run_stress_test(num_clients, orders_per_client):
     # Flatten the list of latencies
     all_latencies = [latency for client_latencies in all_latencies for latency in client_latencies]
     
+    # Calculate and print test results
     total_orders = num_clients * orders_per_client
     total_time = end_time - start_time
     throughput = total_orders / total_time
@@ -55,6 +75,7 @@ async def run_stress_test(num_clients, orders_per_client):
     print(f"Median latency: {median_latency:.2f} ms")
     print(f"95th percentile latency: {p95_latency:.2f} ms")
     
+    # Clean up: cancel the server task
     server_task.cancel()
 
 if __name__ == "__main__":

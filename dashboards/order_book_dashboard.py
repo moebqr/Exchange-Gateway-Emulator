@@ -9,6 +9,7 @@ from collections import defaultdict
 import logging
 import time
 
+# Set up logging (currently set to DEBUG level because I am debugging the dashboard)
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
